@@ -24,7 +24,7 @@ SoundLight::LEDString complete_string(leds, NUMBER_OF_LEDS, false);
 #define pinReset 5
 #define pinStrobe 4
 #define MSGEQ7_INTERVAL ReadsPerSecond(60)
-#define MSGEQ7_SMOOTH 192
+#define MSGEQ7_SMOOTH 64
 
 // // CMSGEQ7-Objekt anlegen
 // CMSGEQ7<MSGEQ7_SMOOTH, pinReset, pinStrobe, pinAnalogLeft, pinAnalogRight> MSGEQ7;
@@ -89,6 +89,9 @@ void setup() {
         Serial.println(F("Startup"));
     }
 
+
+    MSGEQ7.print_equalizer_setting();
+
     SoundLight::Tools::blink(13, 2, 2000);
 
 
@@ -132,15 +135,15 @@ void loop() {
             raw_frequency[i] = MSGEQ7[i];
         }
 
-        if (DEBUG)
-        {
-            // Ausgeben
-            for (uint8_t i = 0; i < NUMBER_OF_FREQUENCIES; ++i)
-            {
-                Serial.print(raw_frequency[i]); Serial.print('\t');
-            }
-            Serial.println(MSGEQ7.volume());
-        }
+        // if (DEBUG)
+        // {
+        //     // Ausgeben
+        //     for (uint8_t i = 0; i < NUMBER_OF_FREQUENCIES; ++i)
+        //     {
+        //         Serial.print(raw_frequency[i]); Serial.print('\t');
+        //     }
+        //     Serial.println(MSGEQ7.volume());
+        // }
 
 
         // HSV_Color::Purple.value = raw_frequency[6];
@@ -159,9 +162,9 @@ void loop() {
         color_strings[4].colorize(HSV_Color::Yellow,    SoundLight::Tools::mapInput(raw_frequency[2], 0, 255, 1, 30));
         color_strings[5].colorize(HSV_Color::Orange,    SoundLight::Tools::mapInput(raw_frequency[1], 0, 255, 1, 30));
         color_strings[6].colorize(HSV_Color::Red,       SoundLight::Tools::mapInput(raw_frequency[0], 0, 255, 1, 30));
-        color_strings[7].colorize(HSV_Color::White,     SoundLight::Tools::mapInput(MSGEQ7.volume(),  0, 255, 1, 30));
-        color_strings[8].colorize(HSV_Color::White,     SoundLight::Tools::mapInput(MSGEQ7.volume(),  0, 255, 1, 30));
-        color_strings[9].colorize(HSV_Color::White,     SoundLight::Tools::mapInput(MSGEQ7.volume(),  0, 255, 1, 30));
+        color_strings[9].colorize(HSV_Color::White,     SoundLight::Tools::mapInput(mapNoise(MSGEQ7.getVolume()),  0, 255, 1, 30));
+        color_strings[8].colorize(HSV_Color::White,     SoundLight::Tools::mapInput(MSGEQ7.get_normalized_volume(),  0, 255, 1, 30));
+        color_strings[7].colorize(HSV_Color::White,     SoundLight::Tools::mapInput(MSGEQ7.get_equalized_volume(),  0, 255, 1, 30));
         
     }
 

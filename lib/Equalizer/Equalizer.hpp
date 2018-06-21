@@ -3,8 +3,34 @@
 
 #include <Equalizer.h>
 
+#define DEBGU false
+
 namespace SoundLight
 {
+
+template <uint8_t smooth, uint8_t resetPin, uint8_t strobePin, uint8_t firstAnalogPin, uint8_t ...analogPins>
+void Equalizer<smooth, resetPin, strobePin, firstAnalogPin, analogPins ...>::
+print_equalizer_setting()
+{
+    for (uint8_t chan = 0; chan < 1 + sizeof...(analogPins); ++chan)
+    {
+        Serial.println(String(F("Channel ")) + String(chan) + ":");
+        Serial.println(String(F("gain: ")) + String(this->eq_setting.channel[chan].gain));
+        Serial.println(String(F("agc_amplitude: ")) + String(this->eq_setting.channel[chan].agc_amplitude));
+        Serial.println(String(F("agc_enabled: ")) + String(this->eq_setting.channel[chan].agc_enabled));
+        
+        Serial.print(String(F("EQ-Factors: \t")));
+        for (uint8_t freg = 0; freg < 7; ++freg)
+        {
+            Serial.print(String(this->eq_setting.channel[chan].eq_factor[freg]) + "\t");
+        }
+        Serial.println();
+    }
+
+    Serial.println(String(F("upper_limit: ")) + String(this->eq_setting.upper_limit));
+    Serial.println(String(F("lower_limit: ")) + String(this->eq_setting.lower_limit));
+
+}
 
 
 template <uint8_t smooth, uint8_t resetPin, uint8_t strobePin, uint8_t firstAnalogPin, uint8_t ...analogPins>
@@ -13,46 +39,31 @@ Equalizer(void)
 :
     CMSGEQ7<smooth, resetPin, strobePin, firstAnalogPin, analogPins ...>()
 {
+    for (uint8_t chan = 0; chan < 1 + sizeof...(analogPins); ++chan)
+    {
+        this->eq_setting.channel[chan].gain = Tools::Fraction<uint32_t>(5, 2);
+        this->eq_setting.channel[chan].agc_amplitude = Tools::Fraction<uint32_t>(MSGEQ7_OUT_MAX/2);
+        this->eq_setting.channel[chan].agc_enabled = false;
+        
+        for (uint8_t freg = 0; freg < 7; ++freg)
+        {
+            this->eq_setting.channel[chan].eq_factor[freg] = Tools::Fraction<uint32_t>(1);
+        }
+    }
+    this->eq_setting.upper_limit = MSGEQ7_OUT_MAX;
+    this->eq_setting.lower_limit = MSGEQ7_OUT_MIN;
 
-    this->equalizer_setting.eq_factor[0] = Tools::Fraction<uint32_t>(128, 128); // Tools::Fraction<uint32_t>(140, 128);
-    this->equalizer_setting.eq_factor[1] = Tools::Fraction<uint32_t>(128, 128); // Tools::Fraction<uint32_t>(127, 128);
-    this->equalizer_setting.eq_factor[2] = Tools::Fraction<uint32_t>(128, 128); // Tools::Fraction<uint32_t>(127, 128);
-    this->equalizer_setting.eq_factor[3] = Tools::Fraction<uint32_t>(128, 128); // Tools::Fraction<uint32_t>(48, 128);
-    this->equalizer_setting.eq_factor[4] = Tools::Fraction<uint32_t>(128, 128); // Tools::Fraction<uint32_t>(48, 128);
-    this->equalizer_setting.eq_factor[5] = Tools::Fraction<uint32_t>(128, 128); // Tools::Fraction<uint32_t>(48, 128);
-    this->equalizer_setting.eq_factor[6] = Tools::Fraction<uint32_t>(128, 128); // Tools::Fraction<uint32_t>(127, 128);
-
-    this->equalizer_setting.gain = Tools::Fraction<uint32_t>(1);
-    this->equalizer_setting.agc_amplitude = Tools::Fraction<uint32_t>(128);
-    this->equalizer_setting.agc_enabled = true;
-
-    this->equalizer_setting.upper_limit = 255;
-    this->equalizer_setting.lower_limit = 0;
 }
 
 
 
 template <uint8_t smooth, uint8_t resetPin, uint8_t strobePin, uint8_t firstAnalogPin, uint8_t ...analogPins>
 Equalizer<smooth, resetPin, strobePin, firstAnalogPin, analogPins ...>::
-Equalizer(const struct equalizer_settings equalizer_setting)
+Equalizer(const struct equalizer_settings eq_setting)
 :
-    CMSGEQ7<smooth, resetPin, strobePin, firstAnalogPin, analogPins ...>()
-{
-    this->equalizer_setting.eq_factor[0] = equalizer_setting.eq_factor[0];
-    this->equalizer_setting.eq_factor[1] = equalizer_setting.eq_factor[1];
-    this->equalizer_setting.eq_factor[2] = equalizer_setting.eq_factor[2];
-    this->equalizer_setting.eq_factor[3] = equalizer_setting.eq_factor[3];
-    this->equalizer_setting.eq_factor[4] = equalizer_setting.eq_factor[4];
-    this->equalizer_setting.eq_factor[5] = equalizer_setting.eq_factor[5];
-    this->equalizer_setting.eq_factor[6] = equalizer_setting.eq_factor[6];
-
-    this->equalizer_setting.gain = equalizer_setting.gain;
-    this->equalizer_setting.agc_amplitude = equalizer_setting.agc_amplitude;
-    this->equalizer_setting.agc_enabled = equalizer_setting.agc_enabled;
-    
-    this->equalizer_setting.upper_limit = equalizer_setting.upper_limit;
-    this->equalizer_setting.lower_limit = equalizer_setting.lower_limit;
-}
+    CMSGEQ7<smooth, resetPin, strobePin, firstAnalogPin, analogPins ...>(),
+    eq_setting(eq_setting)
+{}
 
 
 // functions to read the IC values and save them to the internal array
@@ -64,8 +75,9 @@ read(void)
     if (result)
     {
         eliminateNoise(); // Von Rauschen befreien
-        equalize(); // Equalizer-Settings anwenden
-        normalize(); // Unabhängig von Audiopegel machen
+        // equalize(); // Equalizer-Settings anwenden
+        // normalize(); // Unabhängig von Audiopegel machen
+        transform();
     }
     return result;
 }
@@ -77,11 +89,15 @@ read(const uint32_t interval)
     if (result)
     {
         eliminateNoise(); // Von Rauschen befreien
-        equalize(); // Equalizer-Settings anwenden
-        normalize(); // Unabhängig von Audiopegel machen
+        // equalize(); // Equalizer-Settings anwenden
+        // normalize(); // Unabhängig von Audiopegel machen
+        transform();
     }
     return result;
 }
+
+
+
 
 // function for the user to access the values
 // frequency
@@ -145,6 +161,10 @@ get_equalized_volume(void) const
 }
 
 
+
+
+// function for the user to access the values
+// frequency
 template <uint8_t smooth, uint8_t resetPin, uint8_t strobePin, uint8_t firstAnalogPin, uint8_t ...analogPins>
 MSGEQ7_data_t Equalizer<smooth, resetPin, strobePin, firstAnalogPin, analogPins ...>:: 
 get_normalized_frequency(const uint8_t frequency, const uint8_t channel) const
@@ -172,70 +192,99 @@ get_normalized_frequency(const uint8_t frequency) const
 	// return the average of all channels
 	return (average / (1 + sizeof...(analogPins)));
 }
-
-
-
-
+// function for the user to access the values
+// Volume
 template <uint8_t smooth, uint8_t resetPin, uint8_t strobePin, uint8_t firstAnalogPin, uint8_t ...analogPins>
 MSGEQ7_data_t Equalizer<smooth, resetPin, strobePin, firstAnalogPin, analogPins ...>:: 
-get_max_frequency(uint8_t channel) const
+get_normalized_volume(uint8_t channel) const
 {
-    MSGEQ7_data_t result = get_equalized_frequency(0, channel);
-    MSGEQ7_data_t test;
-    for (uint8_t i = 1; i < 7; ++i)
-    {
-        test = get_equalized_frequency(i, channel);
-        if (test > result)
-            result = test;
-    }
-    return result;
+	// dont read out of bounds
+	if (channel >= (1 + sizeof...(analogPins)))
+		return 0;
 
+	// add all frequencies of a single channel to the overall volume
+	uint16_t vol = 0;
+	for (uint8_t i = 0; i < 7; i++)
+		vol += get_normalized_frequency(i, channel);
+
+	// return the average of this channels
+	return (vol / 7);
 }
 template <uint8_t smooth, uint8_t resetPin, uint8_t strobePin, uint8_t firstAnalogPin, uint8_t ...analogPins>
 MSGEQ7_data_t Equalizer<smooth, resetPin, strobePin, firstAnalogPin, analogPins ...>:: 
-get_max_frequency(void) const
+get_normalized_volume(void) const
 {
-    MSGEQ7_data_t result = get_equalized_frequency(0);
-    MSGEQ7_data_t test;
-    for (uint8_t i = 1; i < 7; ++i)
-    {
-        test = get_equalized_frequency(i);
-        if (test > result)
-            result = test;
-    }
-    return result;
+	// add all frequencies of all channels to the overall volume
+	uint16_t vol = 0;
+	for (uint8_t i = 0; i < 7; i++)
+		vol += get_normalized_frequency(i);
 
+	// return the average of all channels
+	return (vol / 7);
 }
-template <uint8_t smooth, uint8_t resetPin, uint8_t strobePin, uint8_t firstAnalogPin, uint8_t ...analogPins>
-MSGEQ7_data_t Equalizer<smooth, resetPin, strobePin, firstAnalogPin, analogPins ...>:: 
-get_min_frequency(uint8_t channel) const
-{
-    MSGEQ7_data_t result = get_equalized_frequency(0, channel);
-    MSGEQ7_data_t test;
-    for (uint8_t i = 1; i < 7; ++i)
-    {
-        test = get_equalized_frequency(i);
-        if (test < result)
-            result = test;
-    }
-    return result;
 
-}
-template <uint8_t smooth, uint8_t resetPin, uint8_t strobePin, uint8_t firstAnalogPin, uint8_t ...analogPins>
-MSGEQ7_data_t Equalizer<smooth, resetPin, strobePin, firstAnalogPin, analogPins ...>:: 
-get_min_frequency(void) const
-{
-    MSGEQ7_data_t result = get_equalized_frequency(0);
-    MSGEQ7_data_t test;
-    for (uint8_t i = 1; i < 7; ++i)
-    {
-        test = get_equalized_frequency(i);
-        if (test < result)
-            result = test;
-    }
-    return result;
 
-}
+
+// template <uint8_t smooth, uint8_t resetPin, uint8_t strobePin, uint8_t firstAnalogPin, uint8_t ...analogPins>
+// MSGEQ7_data_t Equalizer<smooth, resetPin, strobePin, firstAnalogPin, analogPins ...>:: 
+// get_max_frequency(uint8_t channel) const
+// {
+//     MSGEQ7_data_t result = get_equalized_frequency(0, channel);
+//     MSGEQ7_data_t test;
+//     for (uint8_t i = 1; i < 7; ++i)
+//     {
+//         test = get_equalized_frequency(i, channel);
+//         if (test > result)
+//             result = test;
+//     }
+//     return result;
+
+// }
+// template <uint8_t smooth, uint8_t resetPin, uint8_t strobePin, uint8_t firstAnalogPin, uint8_t ...analogPins>
+// MSGEQ7_data_t Equalizer<smooth, resetPin, strobePin, firstAnalogPin, analogPins ...>:: 
+// get_max_frequency(void) const
+// {
+//     MSGEQ7_data_t result = get_equalized_frequency(0);
+//     MSGEQ7_data_t test;
+//     for (uint8_t i = 1; i < 7; ++i)
+//     {
+//         test = get_equalized_frequency(i);
+//         if (test > result)
+//             result = test;
+//     }
+//     return result;
+
+// }
+// template <uint8_t smooth, uint8_t resetPin, uint8_t strobePin, uint8_t firstAnalogPin, uint8_t ...analogPins>
+// MSGEQ7_data_t Equalizer<smooth, resetPin, strobePin, firstAnalogPin, analogPins ...>:: 
+// get_min_frequency(uint8_t channel) const
+// {
+//     MSGEQ7_data_t result = get_equalized_frequency(0, channel);
+//     MSGEQ7_data_t test;
+//     for (uint8_t i = 1; i < 7; ++i)
+//     {
+//         test = get_equalized_frequency(i);
+//         if (test < result)
+//             result = test;
+//     }
+//     return result;
+
+// }
+// template <uint8_t smooth, uint8_t resetPin, uint8_t strobePin, uint8_t firstAnalogPin, uint8_t ...analogPins>
+// MSGEQ7_data_t Equalizer<smooth, resetPin, strobePin, firstAnalogPin, analogPins ...>:: 
+// get_min_frequency(void) const
+// {
+//     MSGEQ7_data_t result = get_equalized_frequency(0);
+//     MSGEQ7_data_t test;
+//     for (uint8_t i = 1; i < 7; ++i)
+//     {
+//         test = get_equalized_frequency(i);
+//         if (test < result)
+//             result = test;
+//     }
+//     return result;
+
+// }
 
 
 
@@ -276,91 +325,141 @@ eliminateNoise()
     {
         for(uint8_t chan = 0; chan < (1 + sizeof...(analogPins)); ++chan)
         {
-            this->equalized_frequencies[freq].pin[chan] =  mapNoise(CMSGEQ7<smooth, resetPin, strobePin, firstAnalogPin, analogPins ...>::get(freq, chan));
+            this->normalized_frequencies[freq].pin[chan] =  mapNoise(CMSGEQ7<smooth, resetPin, strobePin, firstAnalogPin, analogPins ...>::get(freq, chan));
         }
     }
 }
 
   
-// Equalizer-Settings anwenden
-template <uint8_t smooth, uint8_t resetPin, uint8_t strobePin, uint8_t firstAnalogPin, uint8_t ...analogPins>
-void Equalizer<smooth, resetPin, strobePin, firstAnalogPin, analogPins ...>::
-equalize()
-{
-    for(uint8_t chan = 0; chan < (1 + sizeof...(analogPins)); ++chan)
-    {
-        for (uint8_t freq = 0; freq < 7; ++freq)
-        {
-            const Tools::Fraction<uint32_t> freg_value(this->equalized_frequencies[freq].pin[chan]);
+// // Equalizer-Settings anwenden
+// template <uint8_t smooth, uint8_t resetPin, uint8_t strobePin, uint8_t firstAnalogPin, uint8_t ...analogPins>
+// void Equalizer<smooth, resetPin, strobePin, firstAnalogPin, analogPins ...>::
+// equalize()
+// {
+//     for(uint8_t chan = 0; chan < (1 + sizeof...(analogPins)); ++chan)
+//     {
+//         for (uint8_t freq = 0; freq < 7; ++freq)
+//         {
+//             const Tools::Fraction<uint32_t> freg_value(this->equalized_frequencies[freq].pin[chan]);
 
-            Tools::Fraction<uint32_t> boosted_freg_value = this->equalizer_setting.eq_factor[freq] * freg_value;
+//             Tools::Fraction<uint32_t> boosted_freg_value = this->eq_setting.eq_factor[freq] * freg_value;
 
-            this->equalized_frequencies[freq].pin[chan] = 
-                (MSGEQ7_data_t) Tools::mapInput(boosted_freg_value.value(),
-                    this->equalizer_setting.lower_limit,
-                    this->equalizer_setting.upper_limit,
-                    MSGEQ7_OUT_MIN,
-                    MSGEQ7_OUT_MAX);
+//             this->equalized_frequencies[freq].pin[chan] = 
+//                 (MSGEQ7_data_t) Tools::mapInput(boosted_freg_value.value(),
+//                     this->eq_setting.lower_limit,
+//                     this->eq_setting.upper_limit,
+//                     MSGEQ7_OUT_MIN,
+//                     MSGEQ7_OUT_MAX);
 
-        }
-    }
-}
+//         }
+//     }
+// }
+
+
+// // Unabhängig von Audiopegel machen
+// template <uint8_t smooth, uint8_t resetPin, uint8_t strobePin, uint8_t firstAnalogPin, uint8_t ...analogPins>
+// void Equalizer<smooth, resetPin, strobePin, firstAnalogPin, analogPins ...>:: 
+// normalize()
+// {
+//     for(uint8_t chan = 0; chan < (1 + sizeof...(analogPins)); ++chan)
+//     {
+//         if (this->eq_setting.agc_enabled)
+//         {
+//             const uint32_t scalar = this->get_equalized_volume(chan);
+//             if (scalar > 0)
+//             {
+//                 const Tools::Fraction<uint32_t> agc_gain = this->eq_setting.agc_amplitude / Tools::Fraction<uint32_t>(scalar);
+
+//                 for (uint8_t freq = 0; freq < 7; ++freq)
+//                 {
+//                     const Tools::Fraction<uint32_t> freq_value(this->equalized_frequencies[freq].pin[chan]); 
+
+//                     this->normalized_frequencies[freq].pin[chan] = 
+//                         Tools::mapInput((freq_value * agc_gain).value(),
+//                             this->eq_setting.lower_limit,
+//                             this->eq_setting.upper_limit,
+//                             MSGEQ7_OUT_MIN,
+//                             MSGEQ7_OUT_MAX);
+//                 }
+//             }
+//             else
+//             {
+//                 for (uint8_t freq = 0; freq < 7; ++freq)
+//                 {
+//                     this->normalized_frequencies[freq].pin[chan] = 0;
+//                 }
+//             }
+//         }
+//         else
+//         {
+//             for (uint8_t freq = 0; freq < 7; ++freq)
+//             {
+//                 const Tools::Fraction<uint32_t> freq_value(this->equalized_frequencies[freq].pin[chan]);  
+
+//                 this->normalized_frequencies[freq].pin[chan] = 
+//                         Tools::mapInput((freq_value * this->eq_setting.gain).value(),
+//                             this->eq_setting.lower_limit,
+//                             this->eq_setting.upper_limit,
+//                             MSGEQ7_OUT_MIN,
+//                             MSGEQ7_OUT_MAX);
+//             }
+//         }
+//     }
+// }
+
 
 
 // Unabhängig von Audiopegel machen
 template <uint8_t smooth, uint8_t resetPin, uint8_t strobePin, uint8_t firstAnalogPin, uint8_t ...analogPins>
 void Equalizer<smooth, resetPin, strobePin, firstAnalogPin, analogPins ...>:: 
-normalize()
+transform()
 {
+    // Audiosignal verstärken
+    Tools::Fraction<uint32_t> gain;
+    Tools::Fraction<uint32_t> agc_amplitude; 
+    Tools::Fraction<uint32_t> freq_value;
+    Tools::Fraction<uint32_t> eq_factor;
+    Tools::Fraction<uint32_t> new_freq_value;
+    uint32_t volume = 0;
+
     for(uint8_t chan = 0; chan < (1 + sizeof...(analogPins)); ++chan)
     {
-        if (this->equalizer_setting.agc_enabled)
+        if (this->eq_setting.channel[chan].agc_enabled)
         {
-            const uint32_t scalar = this->get_equalized_volume(chan);
-            if (scalar > 0)
-            {
-                const Tools::Fraction<uint32_t> agc_gain = this->equalizer_setting.agc_amplitude / Tools::Fraction<uint32_t>(scalar);
-
-                for (uint8_t freq = 0; freq < 7; ++freq)
-                {
-                    const Tools::Fraction<uint32_t> freq_value(this->equalized_frequencies[freq].pin[chan]); 
-
-                    this->normalized_frequencies[freq].pin[chan] = 
-                        Tools::mapInput((freq_value * agc_gain).value(),
-                            this->equalizer_setting.lower_limit,
-                            this->equalizer_setting.upper_limit,
-                            MSGEQ7_OUT_MIN,
-                            MSGEQ7_OUT_MAX);
-                }
-            }
-            else
-            {
-                for (uint8_t freq = 0; freq < 7; ++freq)
-                {
-                    this->normalized_frequencies[freq].pin[chan] = 0;
-                }
-            }
+            
+            agc_amplitude = this->eq_setting.channel[chan].agc_amplitude; 
+            volume = this->get_normalized_volume(chan);
+            gain = (volume != 0 ? agc_amplitude / Tools::Fraction<uint32_t>(volume) : Tools::Fraction<uint32_t>(1));
         }
         else
         {
-            for (uint8_t freq = 0; freq < 7; ++freq)
-            {
-                const Tools::Fraction<uint32_t> freq_value(this->equalized_frequencies[freq].pin[chan]);  
+            gain = this->eq_setting.channel[chan].gain;
+        }
 
-                this->normalized_frequencies[freq].pin[chan] = 
-                        Tools::mapInput((freq_value * this->equalizer_setting.gain).value(),
-                            this->equalizer_setting.lower_limit,
-                            this->equalizer_setting.upper_limit,
-                            MSGEQ7_OUT_MIN,
-                            MSGEQ7_OUT_MAX);
-            }
+        for (uint8_t freq = 0; freq < 7; ++freq)
+        {
+            freq_value = Tools::Fraction<uint32_t>(this->normalized_frequencies[freq].pin[chan]);
+            eq_factor = this->eq_setting.channel[chan].eq_factor[freq];
+
+            new_freq_value = freq_value * gain;
+            this->normalized_frequencies[freq].pin[chan] = 
+                    Tools::mapInput(new_freq_value.value(),
+                        this->eq_setting.lower_limit,
+                        this->eq_setting.upper_limit,
+                        MSGEQ7_OUT_MIN,
+                        MSGEQ7_OUT_MAX);
+            
+            new_freq_value *= eq_factor;
+            this->equalized_frequencies[freq].pin[chan] = 
+                    Tools::mapInput(new_freq_value.value(),
+                        this->eq_setting.lower_limit,
+                        this->eq_setting.upper_limit,
+                        MSGEQ7_OUT_MIN,
+                        MSGEQ7_OUT_MAX);
         }
     }
+
 }
-
-
-
-
 
 
 } // end namespace SoundLight

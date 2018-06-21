@@ -15,16 +15,22 @@ class Equalizer : public CMSGEQ7<smooth, resetPin, strobePin, firstAnalogPin, an
     public:
         struct equalizer_settings
         {
-            Tools::Fraction<uint32_t> eq_factor[7];
-            Tools::Fraction<uint32_t> gain;
-            Tools::Fraction<uint32_t> agc_amplitude;
-            bool agc_enabled;
+            struct channel_settings
+            {
+                Tools::Fraction<uint32_t> eq_factor[7];
+                Tools::Fraction<uint32_t> gain;
+                Tools::Fraction<uint32_t> agc_amplitude;
+                bool agc_enabled;
+            };
+            struct channel_settings channel[1 + sizeof...(analogPins)];
             uint32_t upper_limit;
             uint32_t lower_limit;
         };
 
+        void print_equalizer_setting();
+
         Equalizer(void);
-        Equalizer(const struct equalizer_settings equalizer_setting);
+        Equalizer(const struct equalizer_settings eq_setting);
 
         // functions to read the IC values and save them to the internal array
         bool read(void);
@@ -36,8 +42,11 @@ class Equalizer : public CMSGEQ7<smooth, resetPin, strobePin, firstAnalogPin, an
         MSGEQ7_data_t get_equalized_frequency(const uint8_t frequency) const;
         MSGEQ7_data_t get_equalized_volume(uint8_t channel) const;
         MSGEQ7_data_t get_equalized_volume(void) const;
+        // function for the user to access the values
         MSGEQ7_data_t get_normalized_frequency(const uint8_t frequency, const uint8_t channel) const;
         MSGEQ7_data_t get_normalized_frequency(const uint8_t frequency) const;
+        MSGEQ7_data_t get_normalized_volume(uint8_t channel) const;
+        MSGEQ7_data_t get_normalized_volume(void) const;
 
         // Kurzer als oben
         MSGEQ7_data_t frequency(const uint8_t frequency, const uint8_t channel) const;
@@ -45,27 +54,30 @@ class Equalizer : public CMSGEQ7<smooth, resetPin, strobePin, firstAnalogPin, an
         MSGEQ7_data_t volume(uint8_t channel) const;
         MSGEQ7_data_t volume(void) const;
 
-        MSGEQ7_data_t operator[](const uint8_t frequency) const {return this->get_normalized_frequency(frequency);}
+        MSGEQ7_data_t operator[](const uint8_t frequency) const {return this->frequency(frequency);}
 
     private:
 
-        MSGEQ7_data_t get_max_frequency(uint8_t channel) const;
-        MSGEQ7_data_t get_max_frequency(void) const;
-        MSGEQ7_data_t get_min_frequency(uint8_t channel) const;
-        MSGEQ7_data_t get_min_frequency(void) const;
+        // MSGEQ7_data_t get_max_frequency(uint8_t channel) const;
+        // MSGEQ7_data_t get_max_frequency(void) const;
+        // MSGEQ7_data_t get_min_frequency(uint8_t channel) const;
+        // MSGEQ7_data_t get_min_frequency(void) const;
 
         void eliminateNoise(); // Von Rauschen befreien
         void equalize(); // Equalizer-Settings anwenden
         void normalize(); // Unabhängig von Audiopegel machen
 
-        struct equalizer_settings equalizer_setting;
+        void transform();
+
+        struct equalizer_settings eq_setting;
 
         // Array of all input values
         struct frequency{
             MSGEQ7_data_t pin[1 + sizeof...(analogPins)];
         };
-        struct frequency equalized_frequencies[7];
         struct frequency normalized_frequencies[7];
+        struct frequency equalized_frequencies[7];
+        
  
 };
 

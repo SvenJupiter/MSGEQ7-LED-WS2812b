@@ -169,7 +169,8 @@ class Fraction
             const T den = this->denominator * other.numerator;
             return Fraction<T>(num, den);
         }
-        Fraction<T> operator+=(const Fraction<T> other)
+        
+        void operator+=(const Fraction<T> other)
         {
             const T num = this->numerator * other.denominator + other.numerator * this->denominator;
             const T den = this->denominator * other.denominator;
@@ -177,7 +178,7 @@ class Fraction
             this->denominator = den;
             simplify();
         }
-        Fraction<T> operator-=(const Fraction<T> other)
+        void operator-=(const Fraction<T> other)
         {
             const T num = this->numerator * other.denominator - other.numerator * this->denominator;
             const T den = this->denominator * other.denominator;
@@ -185,7 +186,7 @@ class Fraction
             this->denominator = den;
             simplify();
         }
-        Fraction<T> operator*=(const Fraction<T> other)
+        void operator*=(const Fraction<T> other)
         {
             const T num = this->numerator * other.numerator;
             const T den = this->denominator * other.denominator;
@@ -193,7 +194,7 @@ class Fraction
             this->denominator = den;
             simplify();
         }
-        Fraction<T> operator/=(const Fraction<T> other)
+        void operator/=(const Fraction<T> other)
         {
             const T num = this->numerator * other.denominator;
             const T den = this->denominator * other.numerator;
